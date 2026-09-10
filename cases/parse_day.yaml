@@ -1,0 +1,44 @@
+# Разбор свободной фразы в строку с полями.
+# Ожидаемый формат ответа: water=число; gym=да|нет; sleep=число
+
+- id: water_ml
+  input: выпил 300 мл воды
+  expect:
+    contains_all: ["water=0.3"]
+    contains_none: ["конечно", "вот"]
+  note: миллилитры надо перевести в литры
+
+- id: water_liters
+  input: полтора литра воды за день
+  expect:
+    contains_all: ["water=1.5"]
+  note: число словами
+
+- id: gym_yes
+  input: сходил в зал вечером
+  expect:
+    contains_all: ["gym=да"]
+
+- id: gym_no
+  input: зал сегодня пропустил
+  expect:
+    contains_all: ["gym=нет"]
+  note: отрицание, частая ошибка
+
+- id: two_facts
+  input: выпил 500 мл и был в зале
+  expect:
+    contains_all: ["water=0.5", "gym=да"]
+  note: два факта в одной фразе
+
+- id: sleep_range
+  input: спал с двух до восьми
+  expect:
+    contains_all: ["sleep=6"]
+  note: надо посчитать разницу, а не взять число из текста
+
+- id: nothing_useful
+  input: сегодня был тяжёлый день
+  expect:
+    exact: "пусто"
+  note: ничего не извлекается, модель не должна выдумывать
