@@ -1,4 +1,6 @@
-from core.checks import check, contains_all, contains_none, exact, normalize
+import pytest
+
+from core.checks import check, contains_all, contains_none, exact, found, normalize
 
 
 class TestNormalize:
@@ -19,6 +21,11 @@ class TestExact:
     def test_лишнее_слово_это_уже_не_точно(self):
         assert exact("конечно да", "да") is False
 
+    def test_число_в_ожидании(self):
+        # exact: 5 без кавычек раньше падал с AttributeError
+        assert exact("5", 5) is True
+        assert exact("6", 5) is False
+
 
 class TestContainsAll:
     def test_все_факты_на_месте(self):
@@ -32,6 +39,49 @@ class TestContainsAll:
     def test_пустой_список_всегда_верен(self):
         assert contains_all("что угодно", []) is True
 
+    def test_значение_не_режется_посередине(self):
+        # главный случай: 0.35 это не 0.3
+        assert contains_all("water=0.35; gym=да", ["water=0.3"]) is False
+        assert contains_all("water=0.3; gym=да", ["water=0.3"]) is True
+
+    def test_точка_в_конце_ответа_не_мешает(self):
+        assert contains_all("water=0.3.", ["water=0.3"]) is True
+
+
+class TestFound:
+    @pytest.mark.parametrize(
+        "item, text",
+        [
+            ("300", "воды 300 мл"),
+            ("water=0.3", "water=0.3; gym=да"),
+            ("water=0.3", "итог: water=0.3"),
+            ("sleep=6", "sleep=6, gym=нет"),
+            ("зал", "был в зале"),  # слова ищутся как подстрока, окончания не мешают
+            ("gym=да", "gym=да;sleep=7"),
+            ("0.5", "выпил 0.5 л"),
+        ],
+    )
+    def test_находит(self, item, text):
+        assert found(item, text) is True
+
+    @pytest.mark.parametrize(
+        "item, text",
+        [
+            ("water=0.3", "water=0.35"),
+            ("water=0.3", "water=0.3,5"),  # дробь через запятую
+            ("300", "1300 мл"),
+            ("5", "выпил 0.5 л"),
+            ("5", "выпил 0,5 л"),
+            ("0.3", "10.3"),
+            ("sleep=6", "sleep=6.5"),
+        ],
+    )
+    def test_не_режет_число(self, item, text):
+        assert found(item, text) is False
+
+    def test_пустой_кусок_всегда_есть(self):
+        assert found("", "что угодно") is True
+
 
 class TestContainsNone:
     def test_мусора_нет(self):
@@ -39,6 +89,11 @@ class TestContainsNone:
 
     def test_мусор_нашёлся(self):
         assert contains_none("Конечно! 2500", ["конечно"]) is False
+
+    def test_граница_числа_работает_и_здесь(self):
+        # запрещено ровно 0, а 0.5 это другое значение
+        assert contains_none("water=0.5", ["water=0"]) is True
+        assert contains_none("water=0", ["water=0"]) is False
 
 
 class TestCheck:

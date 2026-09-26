@@ -1,0 +1,42 @@
+name: Тесты
+
+# Обычная проверка тестов, отдельно от agent-merge.yml (тот только сливает ветки agent/...).
+# Запускается при изменениях в main и в рабочих ветках, на запросы на слияние,
+# раз в неделю по расписанию и вручную из вкладки Actions.
+# Коммиты, которые делает сам бот слияния, другие workflow не запускают (так устроен
+# GITHUB_TOKEN), поэтому расписание нужно, чтобы значок в README отражал свежий main.
+on:
+  push:
+    branches: ['main', 'work/**']
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 это нижняя версия из README, 3.12 текущая
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Зависимости
+        run: pip install -r requirements.txt
+
+      - name: Тесты
+        run: python -m pytest -q
+
+      - name: Прогон без ключа (--dry-run)
+        run: python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run
