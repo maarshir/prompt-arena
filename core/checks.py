@@ -14,12 +14,34 @@ def normalize(text: str) -> str:
     return text.rstrip(".!")
 
 
-def exact(answer: str, expected: str) -> bool:
+def exact(answer: str, expected) -> bool:
     """Точное совпадение после приведения к общему виду.
 
     Подходит только для коротких ответов: да или нет, число, одно слово.
+    Число в ожидании (exact: 5 без кавычек) сравнивается как текст "5".
     """
-    return normalize(answer) == normalize(expected)
+    return normalize(answer) == normalize(str(expected))
+
+
+def found(item: str, text: str) -> bool:
+    """Есть ли кусок item в тексте text (оба уже нормализованы).
+
+    Обычный поиск подстроки, но число не режется посередине:
+    "water=0.3" не находится в "water=0.35", "300" не находится в "1300",
+    "5" не находится в "0.5". Слова по-прежнему ищутся как подстрока,
+    чтобы "зал" находился в "зале": в русском окончания меняются,
+    и граница слова здесь сломала бы больше, чем починила.
+    """
+    if not item:
+        return True
+    pattern = re.escape(item)
+    if item[0].isdigit():
+        # слева не цифра и не "цифра + точка/запятая" (иначе мы внутри дроби)
+        pattern = r"(?<!\d)(?<!\d[.,])" + pattern
+    if item[-1].isdigit():
+        # справа не цифра и не дробная часть
+        pattern = pattern + r"(?!\d)(?![.,]\d)"
+    return re.search(pattern, text) is not None
 
 
 def contains_all(answer: str, required: list[str]) -> bool:
@@ -28,7 +50,7 @@ def contains_all(answer: str, required: list[str]) -> bool:
     Формулировка может быть любой, важно только наличие сути.
     """
     low = normalize(answer)
-    return all(normalize(item) in low for item in required)
+    return all(found(normalize(str(item)), low) for item in required)
 
 
 def contains_none(answer: str, forbidden: list[str]) -> bool:
@@ -38,7 +60,7 @@ def contains_none(answer: str, forbidden: list[str]) -> bool:
     когда просили только значение.
     """
     low = normalize(answer)
-    return not any(normalize(item) in low for item in forbidden)
+    return not any(found(normalize(str(item)), low) for item in forbidden)
 
 
 def check(answer: str, expect: dict) -> bool:

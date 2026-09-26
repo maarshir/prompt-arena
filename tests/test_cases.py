@@ -50,3 +50,43 @@ def test_пустой_файл(tmp_path):
     path = write(tmp_path, "[]\n")
     with pytest.raises(CaseError, match="ни одной"):
         load_cases(path)
+
+
+def test_exact_с_числом_без_кавычек(tmp_path):
+    path = write(tmp_path, "- id: a\n  input: сколько\n  expect:\n    exact: 5\n")
+    assert load_cases(path)[0].expect == {"exact": "5"}
+
+
+def test_числа_в_списке_становятся_строками(tmp_path):
+    path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_all: [300, 0.5]\n")
+    assert load_cases(path)[0].expect == {"contains_all": ["300", "0.5"]}
+
+
+@pytest.mark.parametrize("value", ["yes", "no", "true", "off", "null"])
+def test_yes_no_без_кавычек_это_ошибка(tmp_path, value):
+    path = write(tmp_path, f"- id: a\n  input: x\n  expect:\n    exact: {value}\n")
+    with pytest.raises(CaseError, match="кавычки"):
+        load_cases(path)
+
+
+def test_yes_в_кавычках_работает(tmp_path):
+    path = write(tmp_path, '- id: a\n  input: x\n  expect:\n    exact: "yes"\n')
+    assert load_cases(path)[0].expect == {"exact": "yes"}
+
+
+def test_строка_вместо_списка_это_ошибка(tmp_path):
+    path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_all: gym=да\n")
+    with pytest.raises(CaseError, match="нужен список"):
+        load_cases(path)
+
+
+def test_expect_не_словарь(tmp_path):
+    path = write(tmp_path, "- id: a\n  input: x\n  expect: [gym=да]\n")
+    with pytest.raises(CaseError, match="набором проверок"):
+        load_cases(path)
+
+
+def test_вложенный_список_это_ошибка(tmp_path):
+    path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_none: [[a, b]]\n")
+    with pytest.raises(CaseError, match="строка или число"):
+        load_cases(path)
