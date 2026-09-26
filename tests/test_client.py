@@ -99,3 +99,13 @@ class TestAsk:
                 await ask(c, "промпт", "текст", MODEL, max_attempts=3)
 
         assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_время_ответа_записывается(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    async with client_from(lambda r: httpx.Response(200, json=ok_body())) as c:
+        answer = await ask(c, "промпт", "текст", MODEL)
+
+    assert answer.seconds >= 0
