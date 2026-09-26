@@ -3,6 +3,7 @@
 import asyncio
 import os
 import random
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -26,6 +27,8 @@ class Answer:
     input_tokens: int
     output_tokens: int
     attempts: int
+    # Сколько секунд занял вопрос целиком, вместе с паузами между повторами
+    seconds: float = 0.0
 
 
 def backoff_delay(attempt: int, base: float = 1.0, cap: float = 30.0) -> float:
@@ -64,6 +67,7 @@ async def ask(
     }
 
     last = ""
+    started = time.monotonic()
 
     for attempt in range(max_attempts):
         try:
@@ -86,6 +90,7 @@ async def ask(
                     input_tokens=usage.get("input_tokens", 0),
                     output_tokens=usage.get("output_tokens", 0),
                     attempts=attempt + 1,
+                    seconds=round(time.monotonic() - started, 3),
                 )
 
             if response.status_code not in RETRY_CODES:
