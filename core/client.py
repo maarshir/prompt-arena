@@ -15,6 +15,10 @@ API_VERSION = "2023-06-01"
 # 400 или 401 повторять бессмысленно: запрос не станет верным от повтора.
 RETRY_CODES = {429, 500, 502, 503, 529}
 
+# Потолок длины ответа. Вынесен в константу, потому что от него зависит ответ,
+# и кэш должен учитывать его в ключе.
+MAX_TOKENS = 512
+
 
 class ModelError(RuntimeError):
     """Модель не ответила и повторять бесполезно."""
@@ -29,6 +33,8 @@ class Answer:
     attempts: int
     # Сколько секунд занял вопрос целиком, вместе с паузами между повторами
     seconds: float = 0.0
+    # Ответ взят из кэша, а не получен сейчас: за него в этом прогоне не платили
+    cached: bool = False
 
 
 def backoff_delay(attempt: int, base: float = 1.0, cap: float = 30.0) -> float:
@@ -47,7 +53,7 @@ async def ask(
     user_input: str,
     model: str,
     max_attempts: int = 4,
-    max_tokens: int = 512,
+    max_tokens: int = MAX_TOKENS,
 ) -> Answer:
     """Один вопрос к модели. Повторяет только то, что имеет шанс пройти."""
     key = os.environ.get("ANTHROPIC_API_KEY")
