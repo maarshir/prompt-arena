@@ -14,11 +14,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from core.cache import AnswerCache, cache_key, with_cache
 from core.cases import load_cases
+from core.client import ask_many
 from core.runner import disagreements, run, save, summarize
 from core.variants import load_variants
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_CACHE = ".cache/answers"
 
 
 def load_env(path: str | Path = ".env") -> None:
@@ -47,6 +50,8 @@ def parse_args(argv=None):
     p.add_argument("--limit", type=int, default=5, help="сколько запросов одновременно")
     p.add_argument("--out", default=None, help="куда сохранить результаты (JSON)")
     p.add_argument("--dry-run", action="store_true", help="только показать, что будет отправлено")
+    p.add_argument("--no-cache", action="store_true", help="не брать ответы из кэша и не сохранять их туда")
+    p.add_argument("--cache-dir", default=DEFAULT_CACHE, help=f"папка кэша ответов (по умолчанию {DEFAULT_CACHE})")
     return p.parse_args(argv)
 
 
@@ -68,6 +73,12 @@ def print_report(results) -> None:
             line = ", ".join(f"{v} {'да' if ok else 'нет'}" for v, ok in marks.items())
             print(f"  {case}: {line}")
 
+    cached = sum(r.cached for r in results)
+    if cached:
+        print()
+        print(f"Из кэша: {cached} из {len(results)} ответов, за них в этот раз не платили. "
+              "Чтобы спросить модель заново, добавьте --no-cache.")
+
     errors = [r for r in results if r.error]
     if errors:
         print()
@@ -85,7 +96,12 @@ def main(argv=None) -> int:
     cases = load_cases(args.cases)
     total = len(variants) * len(cases)
 
+    cache = None if args.no_cache else AnswerCache(args.cache_dir)
     print(f"Вариантов: {len(variants)}, задач: {len(cases)}, запросов: {total}, модель: {model}")
+    if cache is not None:
+        keys = {cache_key(v.prompt, c.input, model) for v in variants for c in cases}
+        hits = sum(cache.get(k) is not None for k in keys)
+        print(f"В кэше уже есть ответов: {hits}, пойдёт в модель: {len(keys) - hits}")
 
     if args.dry_run:
         for v in variants:
@@ -93,15 +109,17 @@ def main(argv=None) -> int:
         print(f"\nЗадачи: {', '.join(c.id for c in cases)}")
         return 0
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        # Проверяем до прогона: иначе получим столько же одинаковых ошибок, сколько запросов
+    if not os.environ.get("ANTHROPIC_API_KEY") and not (cache is not None and hits == len(keys)):
+        # Проверяем до прогона: иначе получим столько же одинаковых ошибок, сколько запросов.
+        # Если все ответы уже в кэше, ключ не нужен: можно перепроверить старые ответы.
         print("Не задан ANTHROPIC_API_KEY. Скопируйте .env.example в .env и впишите ключ.", file=sys.stderr)
         return 2
 
-    results = asyncio.run(run(variants, cases, model, limit=args.limit))
+    ask = ask_many if cache is None else with_cache(ask_many, cache)
+    results = asyncio.run(run(variants, cases, model, limit=args.limit, ask=ask))
 
     out = args.out or f"results/{datetime.now():%Y-%m-%d_%H-%M}_{Path(args.cases).stem}.json"
-    save(results, out, {"model": model, "prompts": args.prompts, "cases": args.cases})
+    save(results, out, {"model": model, "prompts": args.prompts, "cases": args.cases, "cache": cache is not None})
 
     print_report(results)
     print(f"\nВсе ответы сохранены в {out}")

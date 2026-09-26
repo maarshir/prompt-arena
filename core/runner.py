@@ -22,6 +22,7 @@ class Result:
     output_tokens: int = 0
     attempts: int = 0
     seconds: float = 0.0
+    cached: bool = False
 
 
 async def run(
@@ -60,6 +61,7 @@ async def run(
                 output_tokens=answer.output_tokens,
                 attempts=answer.attempts,
                 seconds=answer.seconds,
+                cached=answer.cached,
             )
         )
 
@@ -75,6 +77,9 @@ class VariantSummary:
     input_tokens: int
     output_tokens: int
     seconds: float
+    # Сколько ответов взято из кэша. Токены и время у них из того прогона,
+    # где ответ был получен: это цена ответа, а не траты этого запуска.
+    cached: int = 0
 
 
 def summarize(results: list[Result]) -> list[VariantSummary]:
@@ -92,6 +97,7 @@ def summarize(results: list[Result]) -> list[VariantSummary]:
                 input_tokens=sum(r.input_tokens for r in rows),
                 output_tokens=sum(r.output_tokens for r in rows),
                 seconds=round(sum(r.seconds for r in rows), 3),
+                cached=sum(r.cached for r in rows),
             )
         )
     return summary
