@@ -1,8 +1,10 @@
-# prompt-arena
+# promptdiff
 
-[![Тесты](https://github.com/maarshir/prompt-arena/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/maarshir/prompt-arena/actions/workflows/tests.yml)
+[![Тесты](https://github.com/maarshir/promptdiff-/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/maarshir/promptdiff-/actions/workflows/tests.yml)
 
 Прогоняет несколько вариантов промпта по одним и тем же задачам и показывает, где ответы разошлись.
+
+Название от diff: как `git diff` показывает не весь файл, а только изменения, так и здесь главное в отчёте не средний балл, а задачи, на которых варианты промпта ответили по-разному.
 
 Одной фразой для резюме: инструмент для сравнения промптов на наборе задач с чёткими проверками ответов, без оценок «на глаз».
 
@@ -21,7 +23,7 @@
 - Прогон `run.py`: каждый вариант по каждой задаче, проверка ответов, итоги по вариантам (сколько прошло, сколько не прошло, сколько сбоев, токены, время) и список расхождений. Все ответы сохраняются в JSON.
 - Кэш ответов на диске: одинаковый запрос второй раз в модель не уходит.
 - Цена каждого варианта в долларах через мой [token-counter](https://github.com/maarshir/token-counter): отдельно цена ответов и сколько потрачено в этом запуске. В `--dry-run` прикидка сверху ещё до отправки.
-- 103 теста. Сеть в них подменена, ключ не нужен. На Гитхабе тесты идут на Python 3.10 и 3.12 при каждом изменении в main, в рабочих ветках и в запросах на слияние, плюс раз в неделю по расписанию.
+- 105 тестов. Сеть в них подменена, ключ не нужен. На Гитхабе тесты идут на Python 3.10 и 3.12 при каждом изменении в main, в рабочих ветках и в запросах на слияние, плюс раз в неделю по расписанию.
 
 Настоящего прогона с результатами в репозитории пока нет: для него нужен ключ к модели. Отчёта в Markdown и HTML тоже пока нет, см. «Что дальше».
 
@@ -30,13 +32,15 @@
 Нужен Python 3.10 или новее.
 
 ```bash
-git clone https://github.com/maarshir/prompt-arena.git
-cd prompt-arena
+git clone https://github.com/maarshir/promptdiff- promptdiff
+cd promptdiff
 python -m venv .venv
 source .venv/bin/activate      # на Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pytest
 ```
+
+Адрес репозитория кончается дефисом (`promptdiff-`), поэтому в команде клонирования папка названа явно, чтобы дальше везде была `promptdiff`. Старый адрес `prompt-arena` Гитхаб перенаправляет сюда.
 
 ### Прогон
 
@@ -51,7 +55,7 @@ python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml
 python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run
 ```
 
-Параметры: `--model` (по умолчанию `ARENA_MODEL` из `.env` или `claude-sonnet-4-6`), `--limit` (сколько запросов одновременно, по умолчанию 5), `--out` (куда сохранить JSON, по умолчанию папка `results/`), `--no-cache` и `--cache-dir` (см. ниже), `--prices` (свой файл цен, см. «Цена прогона»).
+Параметры: `--model` (по умолчанию `PROMPTDIFF_MODEL` из `.env` или `claude-sonnet-4-6`; старое имя `ARENA_MODEL` тоже понимается), `--limit` (сколько запросов одновременно, по умолчанию 5), `--out` (куда сохранить JSON, по умолчанию папка `results/`), `--no-cache` и `--cache-dir` (см. ниже), `--prices` (свой файл цен, см. «Цена прогона»).
 
 Так выглядит итог в консоли. **Это не настоящий прогон:** ответы и число токенов придуманы для примера, модель подменена так же, как в тестах. Цена посчитана по этим выдуманным токенам. Настоящий пример появится здесь после первого прогона с ключом.
 
