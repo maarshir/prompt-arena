@@ -9,6 +9,7 @@
 
 import argparse
 import asyncio
+import functools
 import os
 import sys
 from datetime import datetime
@@ -18,10 +19,11 @@ from core.cache import AnswerCache, cache_key, with_cache
 from core.cases import load_cases
 from core.client import ask_many
 from core.pricing import estimate_upper, price_run, usd
+from core.providers import ANTHROPIC, GROQ, PROVIDERS, ProviderError, for_model
 from core.runner import disagreements, run, save, summarize
 from core.variants import load_variants
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = ANTHROPIC.default_model
 DEFAULT_CACHE = ".cache/answers"
 
 
@@ -47,8 +49,16 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Сравнение вариантов промпта на наборе задач")
     p.add_argument("--prompts", required=True, help="YAML с вариантами промпта")
     p.add_argument("--cases", required=True, help="YAML с задачами")
-    p.add_argument("--model", default=None, help=f"модель (по умолчанию PROMPTDIFF_MODEL или {DEFAULT_MODEL})")
+    p.add_argument("--model", default=None,
+                   help=f"модель (по умолчанию PROMPTDIFF_MODEL, иначе {DEFAULT_MODEL} "
+                        f"или {GROQ.default_model}, если задан только GROQ_API_KEY)")
+    p.add_argument("--provider", choices=sorted(PROVIDERS), default=None,
+                   help="поставщик (по умолчанию PROMPTDIFF_PROVIDER или по имени модели: "
+                        "с косой чертой groq, иначе anthropic)")
     p.add_argument("--limit", type=int, default=5, help="сколько запросов одновременно")
+    p.add_argument("--rpm", type=float, default=None,
+                   help="не больше стольких запросов в минуту (по умолчанию PROMPTDIFF_RPM; "
+                        f"для Groq {GROQ.rpm:g}, для Anthropic без ограничения)")
     p.add_argument("--out", default=None, help="куда сохранить результаты (JSON)")
     p.add_argument("--dry-run", action="store_true", help="только показать, что будет отправлено")
     p.add_argument("--no-cache", action="store_true", help="не брать ответы из кэша и не сохранять их туда")
@@ -100,25 +110,70 @@ def print_report(results, run_cost=None) -> None:
             print(f"  {r.variant} / {r.case}: {r.error[:120]}")
 
 
-def default_model() -> str:
-    """Модель из .env. ARENA_MODEL осталась от старого названия проекта (prompt-arena):
-    её по-прежнему понимаем, чтобы не сломать уже заполненные .env."""
-    return os.environ.get("PROMPTDIFF_MODEL") or os.environ.get("ARENA_MODEL") or DEFAULT_MODEL
+def default_model(provider: str | None = None) -> str:
+    """Модель, если её не указали в --model.
+
+    Сначала .env: PROMPTDIFF_MODEL или ARENA_MODEL (осталась от старого названия
+    проекта prompt-arena, её по-прежнему понимаем, чтобы не сломать заполненные .env).
+    Потом модель по умолчанию у выбранного поставщика. Если поставщик не выбран,
+    а ключ есть только от Groq, берём модель Groq: так бесплатный прогон
+    запускается без лишних флагов.
+    """
+    from_env = os.environ.get("PROMPTDIFF_MODEL") or os.environ.get("ARENA_MODEL")
+    if from_env:
+        return from_env
+    if provider:
+        return PROVIDERS[provider].default_model
+    if not os.environ.get(ANTHROPIC.key_env) and os.environ.get(GROQ.key_env):
+        return GROQ.default_model
+    return DEFAULT_MODEL
+
+
+def requests_per_minute(arg: float | None, provider) -> float | None:
+    """Ограничение частоты: флаг, потом PROMPTDIFF_RPM, потом значение поставщика.
+    0 значит без ограничения."""
+    if arg is None:
+        env = os.environ.get("PROMPTDIFF_RPM")
+        if env:
+            try:
+                arg = float(env)
+            except ValueError:
+                raise SystemExit(f"PROMPTDIFF_RPM должно быть числом, а не {env!r}") from None
+    if arg is None:
+        return provider.rpm
+    if arg < 0:
+        raise SystemExit("--rpm не может быть отрицательным")
+    return arg or None
+
+
+def pace(requests: int, rpm: float) -> str:
+    """Сколько минимум займёт прогон при ограничении частоты: первый запрос сразу."""
+    seconds = max(0, requests - 1) * 60 / rpm
+    return f"{seconds:.0f} с" if seconds < 120 else f"{seconds / 60:.1f} мин"
 
 
 def main(argv=None) -> int:
     load_env()
     args = parse_args(argv)
-    model = args.model or default_model()
+    provider_name = args.provider or os.environ.get("PROMPTDIFF_PROVIDER") or None
+    try:
+        model = args.model or default_model(provider_name)
+        provider = for_model(model, provider_name)
+    except (ProviderError, KeyError) as err:
+        print(f"Неизвестный поставщик: {err}", file=sys.stderr)
+        return 2
+    rpm = requests_per_minute(args.rpm, provider)
 
     variants = load_variants(args.prompts)
     cases = load_cases(args.cases)
     total = len(variants) * len(cases)
 
     cache = None if args.no_cache else AnswerCache(args.cache_dir)
-    print(f"Вариантов: {len(variants)}, задач: {len(cases)}, запросов: {total}, модель: {model}")
+    print(f"Вариантов: {len(variants)}, задач: {len(cases)}, запросов: {total}, "
+          f"модель: {model}, поставщик: {provider.name}")
     # Что реально уйдёт в модель: одинаковые запросы один раз, ответы из кэша не спрашиваем
-    to_send = {cache_key(v.prompt, c.input, model): (v.prompt, c.input) for v in variants for c in cases}
+    to_send = {cache_key(v.prompt, c.input, model, provider=provider): (v.prompt, c.input)
+               for v in variants for c in cases}
     if cache is not None:
         total_keys = len(to_send)
         to_send = {k: job for k, job in to_send.items() if cache.get(k) is None}
@@ -130,26 +185,32 @@ def main(argv=None) -> int:
         print(f"\nЗадачи: {', '.join(c.id for c in cases)}")
         # Без кэша одинаковые запросы не склеиваются, в модель уйдёт каждая пара
         jobs = list(to_send.values()) if cache is not None else [(v.prompt, c.input) for v in variants for c in cases]
-        upper, reason = estimate_upper(jobs, model, args.prices)
+        upper, reason = estimate_upper(jobs, model, args.prices, max_tokens=provider.max_tokens)
         if upper is None:
             print(f"\nЦена неизвестна: {reason}")
         else:
             print(f"\nПрикидка сверху для {len(jobs)} запросов: ≈{usd(upper)} "
                   "(вход прикинут без токенизатора, каждый ответ посчитан как полный потолок длины)")
+        if rpm and jobs:
+            print(f"Не больше {rpm:g} запросов в минуту: прогон займёт не меньше {pace(len(jobs), rpm)}")
         return 0
 
-    if not os.environ.get("ANTHROPIC_API_KEY") and to_send:
+    if not os.environ.get(provider.key_env) and to_send:
         # Проверяем до прогона: иначе получим столько же одинаковых ошибок, сколько запросов.
         # Если все ответы уже в кэше, ключ не нужен: можно перепроверить старые ответы.
-        print("Не задан ANTHROPIC_API_KEY. Скопируйте .env.example в .env и впишите ключ.", file=sys.stderr)
+        print(f"Не задан {provider.key_env}. Скопируйте .env.example в .env и впишите ключ.", file=sys.stderr)
         return 2
 
-    ask = ask_many if cache is None else with_cache(ask_many, cache)
+    if rpm and to_send:
+        print(f"Не больше {rpm:g} запросов в минуту, это займёт не меньше {pace(len(to_send), rpm)}")
+    ask = functools.partial(ask_many, provider=provider, rpm=rpm)
+    ask = ask if cache is None else with_cache(ask, cache, provider)
     results = asyncio.run(run(variants, cases, model, limit=args.limit, ask=ask))
 
     out = args.out or f"results/{datetime.now():%Y-%m-%d_%H-%M}_{Path(args.cases).stem}.json"
     run_cost = price_run(results, model, args.prices)
-    save(results, out, {"model": model, "prompts": args.prompts, "cases": args.cases, "cache": cache is not None},
+    save(results, out, {"model": model, "provider": provider.name, "prompts": args.prompts,
+                        "cases": args.cases, "cache": cache is not None},
          cost=run_cost.to_json())
 
     print_report(results, run_cost)

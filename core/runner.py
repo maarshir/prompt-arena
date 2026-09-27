@@ -23,6 +23,8 @@ class Result:
     attempts: int = 0
     seconds: float = 0.0
     cached: bool = False
+    # Входные токены, которые поставщик прочитал из своего кэша промпта (дешевле обычных)
+    cache_read_tokens: int = 0
 
 
 async def run(
@@ -62,6 +64,7 @@ async def run(
                 attempts=answer.attempts,
                 seconds=answer.seconds,
                 cached=answer.cached,
+                cache_read_tokens=answer.cache_read_tokens,
             )
         )
 

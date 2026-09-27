@@ -86,7 +86,13 @@ def price_run(results, model: str, prices_path=None) -> RunCost:
         for r in results:
             if r.variant != variant:
                 continue
-            one = cost(Usage(input_tokens=r.input_tokens, output_tokens=r.output_tokens), price).total
+            usage = Usage(input_tokens=r.input_tokens, output_tokens=r.output_tokens,
+                          cache_read_tokens=r.cache_read_tokens)
+            try:
+                one = cost(usage, price).total
+            except PriceError as err:
+                # Например, есть токены из кэша промпта, а цены кэша в таблице нет
+                return RunCost(model=model, known=False, reason=str(err))
             answers += one
             if not r.cached:
                 spent += one
