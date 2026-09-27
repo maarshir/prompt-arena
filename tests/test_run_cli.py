@@ -35,6 +35,7 @@ def test_dry_run_без_ключа(monkeypatch, capsys):
 
 
 def test_модель_по_умолчанию(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("PROMPTDIFF_MODEL", raising=False)
     monkeypatch.delenv("ARENA_MODEL", raising=False)
     assert cli.default_model() == cli.DEFAULT_MODEL
@@ -65,8 +66,10 @@ def test_без_ключа_понятная_ошибка(monkeypatch, capsys):
 def fake_model(calls):
     """Подмена ask_many: вариант rules отвечает верно на задачу про зал, short нет."""
 
-    async def ask(jobs, limit):
+    async def ask(jobs, limit, **options):
+        # options: поставщик и ограничение частоты, которые run.py передаёт настоящему ask_many
         calls.append(len(jobs))
+        fake_model.options = options
         return [
             Answer("gym=нет" if "пропустил" in prompt else "gym=да", model, 5, 1, 1, 0.1)
             for prompt, user_input, model in jobs
