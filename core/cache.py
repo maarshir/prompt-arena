@@ -4,8 +4,9 @@
 или набор задач. Одинаковый запрос второй раз к модели не уходит,
 ответ берётся из файла.
 
-Ключ собирается из всего, от чего зависит ответ: модель, промпт, входной
-текст, потолок длины ответа и версия API. Поменялась хоть одна буква в
+Ключ собирается из всего, от чего зависит ответ: поставщик и версия его API,
+модель, промпт, входной текст, потолок длины ответа и дополнительные поля
+запроса (например, усилие рассуждения у gpt-oss на Groq). Поменялась хоть одна буква в
 промпте, значит, другой ключ и новый запрос.
 
 Важно: модель отвечает не всегда одинаково. Кэш намеренно закрепляет
@@ -20,18 +21,26 @@ import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from core.client import API_VERSION, MAX_TOKENS, Answer
+from core.client import Answer
+from core.providers import for_model
 
 # Меняется, если меняется формат записи. Старые записи тогда просто не находятся.
-FORMAT = 1
+# 2: в ключе появился поставщик (Anthropic или Groq) и его дополнительные поля.
+FORMAT = 2
 
 
-def cache_key(prompt: str, user_input: str, model: str, max_tokens: int = MAX_TOKENS) -> str:
+def cache_key(prompt: str, user_input: str, model: str, max_tokens: int | None = None, provider=None) -> str:
     """Отпечаток запроса. json.dumps со списком, а не склейка строк через разделитель:
-    иначе ("a|b", "c") и ("a", "b|c") дали бы один и тот же ключ."""
+    иначе ("a|b", "c") и ("a", "b|c") дали бы один и тот же ключ.
+
+    Поставщик в ключе: одно и то же имя модели у двух поставщиков может отвечать
+    по-разному, и ответ одного не должен выдаваться за ответ другого.
+    """
+    provider = provider or for_model(model)
     raw = json.dumps(
-        [FORMAT, API_VERSION, model, max_tokens, prompt, user_input],
-        ensure_ascii=False,
+        [FORMAT, provider.name, provider.version, model, max_tokens or provider.max_tokens,
+         provider.extra(model), prompt, user_input],
+        ensure_ascii=False, sort_keys=True,
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -80,7 +89,7 @@ class AnswerCache:
             raise
 
 
-def with_cache(ask, cache: AnswerCache):
+def with_cache(ask, cache: AnswerCache, provider=None):
     """Оборачивает функцию вида ask_many(jobs, limit) кэшем.
 
     Возвращает функцию с той же подписью, поэтому прогону всё равно,
@@ -90,7 +99,7 @@ def with_cache(ask, cache: AnswerCache):
     """
 
     async def cached_ask(jobs, limit=5):
-        keys = [cache_key(prompt, user_input, model) for prompt, user_input, model in jobs]
+        keys = [cache_key(prompt, user_input, model, provider=provider) for prompt, user_input, model in jobs]
         out = [cache.get(k) for k in keys]
 
         missing: dict[str, tuple[str, str, str]] = {}

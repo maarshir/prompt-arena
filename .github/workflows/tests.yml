@@ -39,4 +39,6 @@ jobs:
         run: python -m pytest -q
 
       - name: Прогон без ключа (--dry-run)
-        run: python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run
+        run: |
+          python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run
+          python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run --provider groq
