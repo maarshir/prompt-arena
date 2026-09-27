@@ -47,7 +47,7 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Сравнение вариантов промпта на наборе задач")
     p.add_argument("--prompts", required=True, help="YAML с вариантами промпта")
     p.add_argument("--cases", required=True, help="YAML с задачами")
-    p.add_argument("--model", default=None, help=f"модель (по умолчанию ARENA_MODEL или {DEFAULT_MODEL})")
+    p.add_argument("--model", default=None, help=f"модель (по умолчанию PROMPTDIFF_MODEL или {DEFAULT_MODEL})")
     p.add_argument("--limit", type=int, default=5, help="сколько запросов одновременно")
     p.add_argument("--out", default=None, help="куда сохранить результаты (JSON)")
     p.add_argument("--dry-run", action="store_true", help="только показать, что будет отправлено")
@@ -100,10 +100,16 @@ def print_report(results, run_cost=None) -> None:
             print(f"  {r.variant} / {r.case}: {r.error[:120]}")
 
 
+def default_model() -> str:
+    """Модель из .env. ARENA_MODEL осталась от старого названия проекта (prompt-arena):
+    её по-прежнему понимаем, чтобы не сломать уже заполненные .env."""
+    return os.environ.get("PROMPTDIFF_MODEL") or os.environ.get("ARENA_MODEL") or DEFAULT_MODEL
+
+
 def main(argv=None) -> int:
     load_env()
     args = parse_args(argv)
-    model = args.model or os.environ.get("ARENA_MODEL") or DEFAULT_MODEL
+    model = args.model or default_model()
 
     variants = load_variants(args.prompts)
     cases = load_cases(args.cases)

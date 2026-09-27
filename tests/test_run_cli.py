@@ -34,6 +34,27 @@ def test_dry_run_без_ключа(monkeypatch, capsys):
     assert "--- rules ---" in out
 
 
+def test_модель_по_умолчанию(monkeypatch):
+    monkeypatch.delenv("PROMPTDIFF_MODEL", raising=False)
+    monkeypatch.delenv("ARENA_MODEL", raising=False)
+    assert cli.default_model() == cli.DEFAULT_MODEL
+    # старое имя переменной из .env времён prompt-arena по-прежнему работает
+    monkeypatch.setenv("ARENA_MODEL", "старая")
+    assert cli.default_model() == "старая"
+    # новое имя важнее старого
+    monkeypatch.setenv("PROMPTDIFF_MODEL", "новая")
+    assert cli.default_model() == "новая"
+
+
+def test_dry_run_показывает_модель_из_env(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_env", lambda: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ARENA_MODEL", raising=False)
+    monkeypatch.setenv("PROMPTDIFF_MODEL", "claude-haiku-4-5")
+    assert cli.main(ARGS + ["--dry-run"]) == 0
+    assert "модель: claude-haiku-4-5" in capsys.readouterr().out
+
+
 def test_без_ключа_понятная_ошибка(monkeypatch, capsys):
     monkeypatch.setattr(cli, "load_env", lambda: None)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
