@@ -124,11 +124,12 @@ def disagreements(results: list[Result]) -> dict[str, dict[str, bool]]:
     }
 
 
-def save(results: list[Result], path: str | Path, meta: dict) -> Path:
+def save(results: list[Result], path: str | Path, meta: dict, cost: dict | None = None) -> Path:
     """Пишет прогон в JSON: условия прогона и все ответы как есть.
 
     Ответы сохраняются целиком, чтобы потом можно было перепроверить их
     новыми проверками без повторных запросов к модели.
+    cost это цена прогона из core.pricing (RunCost.to_json), если её посчитали.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,5 +138,7 @@ def save(results: list[Result], path: str | Path, meta: dict) -> Path:
         "summary": [asdict(s) for s in summarize(results)],
         "results": [asdict(r) for r in results],
     }
+    if cost is not None:
+        data["cost"] = cost
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

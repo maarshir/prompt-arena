@@ -17,6 +17,7 @@ from pathlib import Path
 from core.cache import AnswerCache, cache_key, with_cache
 from core.cases import load_cases
 from core.client import ask_many
+from core.pricing import estimate_upper, price_run, usd
 from core.runner import disagreements, run, save, summarize
 from core.variants import load_variants
 
@@ -52,16 +53,28 @@ def parse_args(argv=None):
     p.add_argument("--dry-run", action="store_true", help="только показать, что будет отправлено")
     p.add_argument("--no-cache", action="store_true", help="не брать ответы из кэша и не сохранять их туда")
     p.add_argument("--cache-dir", default=DEFAULT_CACHE, help=f"папка кэша ответов (по умолчанию {DEFAULT_CACHE})")
+    p.add_argument("--prices", default=None,
+                   help="свой файл цен token-counter (по умолчанию TOKEN_COUNTER_PRICES или встроенная таблица)")
     return p.parse_args(argv)
 
 
-def print_report(results) -> None:
+def print_report(results, run_cost=None) -> None:
     print()
-    print(f"{'вариант':12} {'прошло':>7} {'нет':>5} {'сбой':>5} {'токены вх/вых':>15} {'сек':>7}")
+    print(f"{'вариант':12} {'прошло':>7} {'нет':>5} {'сбой':>5} {'токены вх/вых':>15} {'сек':>7} {'цена':>11}")
     for s in summarize(results):
         total = s.passed + s.failed + s.errors
         tokens = f"{s.input_tokens}/{s.output_tokens}"
-        print(f"{s.variant:12} {s.passed:>3}/{total:<3} {s.failed:>5} {s.errors:>5} {tokens:>15} {s.seconds:>7}")
+        vc = run_cost.for_variant(s.variant) if run_cost is not None and run_cost.known else None
+        price = usd(vc.answers) if vc is not None else "?"
+        print(f"{s.variant:12} {s.passed:>3}/{total:<3} {s.failed:>5} {s.errors:>5} {tokens:>15} {s.seconds:>7} {price:>11}")
+
+    if run_cost is not None:
+        print()
+        if run_cost.known:
+            print(f"Цена ответов: {usd(run_cost.answers)}, потрачено в этом запуске: {usd(run_cost.spent)} "
+                  f"(цены {run_cost.model} на {run_cost.checked}, token-counter)")
+        else:
+            print(f"Цена неизвестна: {run_cost.reason}")
 
     diff = disagreements(results)
     print()
@@ -98,18 +111,28 @@ def main(argv=None) -> int:
 
     cache = None if args.no_cache else AnswerCache(args.cache_dir)
     print(f"Вариантов: {len(variants)}, задач: {len(cases)}, запросов: {total}, модель: {model}")
+    # Что реально уйдёт в модель: одинаковые запросы один раз, ответы из кэша не спрашиваем
+    to_send = {cache_key(v.prompt, c.input, model): (v.prompt, c.input) for v in variants for c in cases}
     if cache is not None:
-        keys = {cache_key(v.prompt, c.input, model) for v in variants for c in cases}
-        hits = sum(cache.get(k) is not None for k in keys)
-        print(f"В кэше уже есть ответов: {hits}, пойдёт в модель: {len(keys) - hits}")
+        total_keys = len(to_send)
+        to_send = {k: job for k, job in to_send.items() if cache.get(k) is None}
+        print(f"В кэше уже есть ответов: {total_keys - len(to_send)}, пойдёт в модель: {len(to_send)}")
 
     if args.dry_run:
         for v in variants:
             print(f"\n--- {v.id} ---\n{v.prompt}")
         print(f"\nЗадачи: {', '.join(c.id for c in cases)}")
+        # Без кэша одинаковые запросы не склеиваются, в модель уйдёт каждая пара
+        jobs = list(to_send.values()) if cache is not None else [(v.prompt, c.input) for v in variants for c in cases]
+        upper, reason = estimate_upper(jobs, model, args.prices)
+        if upper is None:
+            print(f"\nЦена неизвестна: {reason}")
+        else:
+            print(f"\nПрикидка сверху для {len(jobs)} запросов: ≈{usd(upper)} "
+                  "(вход прикинут без токенизатора, каждый ответ посчитан как полный потолок длины)")
         return 0
 
-    if not os.environ.get("ANTHROPIC_API_KEY") and not (cache is not None and hits == len(keys)):
+    if not os.environ.get("ANTHROPIC_API_KEY") and to_send:
         # Проверяем до прогона: иначе получим столько же одинаковых ошибок, сколько запросов.
         # Если все ответы уже в кэше, ключ не нужен: можно перепроверить старые ответы.
         print("Не задан ANTHROPIC_API_KEY. Скопируйте .env.example в .env и впишите ключ.", file=sys.stderr)
@@ -119,9 +142,11 @@ def main(argv=None) -> int:
     results = asyncio.run(run(variants, cases, model, limit=args.limit, ask=ask))
 
     out = args.out or f"results/{datetime.now():%Y-%m-%d_%H-%M}_{Path(args.cases).stem}.json"
-    save(results, out, {"model": model, "prompts": args.prompts, "cases": args.cases, "cache": cache is not None})
+    run_cost = price_run(results, model, args.prices)
+    save(results, out, {"model": model, "prompts": args.prompts, "cases": args.cases, "cache": cache is not None},
+         cost=run_cost.to_json())
 
-    print_report(results)
+    print_report(results, run_cost)
     print(f"\nВсе ответы сохранены в {out}")
     return 0
 
