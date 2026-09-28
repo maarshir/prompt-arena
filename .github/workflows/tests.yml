@@ -40,5 +40,6 @@ jobs:
 
       - name: Прогон без ключа (--dry-run)
         run: |
-          python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run
-          python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml --dry-run --provider groq
+          python run.py --prompts prompts/support_ticket.yaml --cases cases/support_ticket.yaml --dry-run
+          python run.py --prompts prompts/support_ticket.yaml --cases cases/support_ticket.yaml --dry-run --provider groq
+          python run.py --prompts prompts/ticket_topic.yaml --cases cases/ticket_topic.yaml --dry-run

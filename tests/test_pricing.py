@@ -131,7 +131,7 @@ def test_модель_без_цены_прогон_всё_равно_прохо�
     assert cli.main(base(tmp_path, model="m") + ["--out", str(out_file)]) == 0
     out = capsys.readouterr().out
     assert "Цена неизвестна: Нет цены для модели m" in out
-    assert "gym_no: short нет, rules да" in out
+    assert "urgent_negated: short нет, rules да" in out
     assert json.loads(out_file.read_text(encoding="utf-8"))["cost"]["known"] is False
 
 

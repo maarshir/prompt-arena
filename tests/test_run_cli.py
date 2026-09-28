@@ -22,7 +22,7 @@ def test_load_env_без_файла(tmp_path):
     cli.load_env(tmp_path / "нет")
 
 
-ARGS = ["--prompts", "prompts/parse_day.yaml", "--cases", "cases/parse_day.yaml"]
+ARGS = ["--prompts", "prompts/support_ticket.yaml", "--cases", "cases/support_ticket.yaml"]
 
 
 def test_dry_run_без_ключа(monkeypatch, capsys):
@@ -64,14 +64,17 @@ def test_без_ключа_понятная_ошибка(monkeypatch, capsys):
 
 
 def fake_model(calls):
-    """Подмена ask_many: вариант rules отвечает верно на задачу про зал, short нет."""
+    """Подмена ask_many: вариант rules верно понимает «не срочно», short нет."""
 
     async def ask(jobs, limit, **options):
         # options: поставщик и ограничение частоты, которые run.py передаёт настоящему ask_many
         calls.append(len(jobs))
         fake_model.options = options
         return [
-            Answer("gym=нет" if "пропустил" in prompt else "gym=да", model, 5, 1, 1, 0.1)
+            Answer(
+                "order=1204; urgent=no" if "не срочно" in prompt else "order=1204; urgent=yes",
+                model, 5, 1, 1, 0.1,
+            )
             for prompt, user_input, model in jobs
         ]
 
@@ -89,7 +92,7 @@ def test_полный_прогон_с_подменённой_моделью(monk
     out = capsys.readouterr().out
     assert out_file.exists()
     assert "Расхождения" in out
-    assert "gym_no: short нет, rules да" in out
+    assert "urgent_negated: short нет, rules да" in out
     assert calls == [14]
 
 
@@ -110,7 +113,7 @@ def test_второй_прогон_из_кэша_без_ключа_и_без_з�
     assert calls == [14]
     assert "В кэше уже есть ответов: 14, пойдёт в модель: 0" in out
     assert "Из кэша: 14 из 14" in out
-    assert "gym_no: short нет, rules да" in out
+    assert "urgent_negated: short нет, rules да" in out
 
 
 def test_no_cache_спрашивает_заново(monkeypatch, tmp_path, capsys):
