@@ -108,8 +108,8 @@ async def test_ошибка_не_запоминается(tmp_path):
 
 async def test_прогон_с_кэшем_помечает_ответы_и_считает_в_итогах(tmp_path):
     variants = [Variant("a", "промпт А"), Variant("b", "промпт Б")]
-    cases = [Case("water", "выпил 300 мл", {"contains_all": ["water=0.3"]})]
-    model = counting_ask(reply=lambda p, i: "water=0.3")
+    cases = [Case("order", "заказ 48213", {"contains_all": ["order=48213"]})]
+    model = counting_ask(reply=lambda p, i: "order=48213")
     ask = with_cache(model, AnswerCache(tmp_path))
 
     await run(variants, cases, "m", ask=ask)
