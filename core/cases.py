@@ -51,7 +51,7 @@ def _clean_expect(expect: dict, case_id: str) -> dict:
         if not isinstance(items, list):
             # строка вместо списка перебиралась бы по буквам и почти всегда проходила
             raise CaseError(
-                f'Задача {case_id}, {key}: нужен список, например {key}: ["gym=да"]'
+                f'Задача {case_id}, {key}: нужен список, например {key}: ["urgent=yes"]'
             )
         clean[key] = [_as_text(item, f"Задача {case_id}, {key}") for item in items]
     return clean

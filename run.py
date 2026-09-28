@@ -2,7 +2,7 @@
 
 Пример:
 
-    python run.py --prompts prompts/parse_day.yaml --cases cases/parse_day.yaml
+    python run.py --prompts prompts/support_ticket.yaml --cases cases/support_ticket.yaml
 
 Без ключа можно посмотреть, что будет отправлено: добавьте --dry-run.
 """
