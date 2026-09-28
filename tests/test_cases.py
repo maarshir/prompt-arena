@@ -1,6 +1,9 @@
+from pathlib import Path
+
 import pytest
 
 from core.cases import CaseError, load_cases
+from core.variants import load_variants
 
 
 def write(tmp_path, text):
@@ -10,10 +13,10 @@ def write(tmp_path, text):
 
 
 def test_загружает_рабочий_набор():
-    cases = load_cases("cases/parse_day.yaml")
+    cases = load_cases("cases/support_ticket.yaml")
     assert len(cases) == 7
-    assert cases[0].id == "water_ml"
-    assert "300" in cases[0].input
+    assert cases[0].id == "order_and_phone"
+    assert "48213" in cases[0].input
 
 
 def test_expect_необязателен(tmp_path):
@@ -75,13 +78,13 @@ def test_yes_в_кавычках_работает(tmp_path):
 
 
 def test_строка_вместо_списка_это_ошибка(tmp_path):
-    path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_all: gym=да\n")
+    path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_all: urgent=yes\n")
     with pytest.raises(CaseError, match="нужен список"):
         load_cases(path)
 
 
 def test_expect_не_словарь(tmp_path):
-    path = write(tmp_path, "- id: a\n  input: x\n  expect: [gym=да]\n")
+    path = write(tmp_path, "- id: a\n  input: x\n  expect: [urgent=yes]\n")
     with pytest.raises(CaseError, match="набором проверок"):
         load_cases(path)
 
@@ -90,3 +93,10 @@ def test_вложенный_список_это_ошибка(tmp_path):
     path = write(tmp_path, "- id: a\n  input: x\n  expect:\n    contains_none: [[a, b]]\n")
     with pytest.raises(CaseError, match="строка или число"):
         load_cases(path)
+
+
+@pytest.mark.parametrize("path", sorted(Path("cases").glob("*.yaml")), ids=lambda p: p.stem)
+def test_все_наборы_из_репозитория_загружаются_и_у_каждого_есть_варианты(path):
+    # набор без файла вариантов с тем же именем в prompts/ запустить по README не получится
+    assert load_cases(path)
+    assert load_variants(Path("prompts") / path.name)

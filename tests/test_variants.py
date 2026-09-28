@@ -10,7 +10,7 @@ def write(tmp_path, text):
 
 
 def test_настоящий_файл_загружается():
-    variants = load_variants("prompts/parse_day.yaml")
+    variants = load_variants("prompts/support_ticket.yaml")
     assert [v.id for v in variants] == ["short", "rules"]
     assert all(v.prompt for v in variants)
 

@@ -29,36 +29,36 @@ class TestExact:
 
 class TestContainsAll:
     def test_все_факты_на_месте(self):
-        answer = "Воды 300 мл, зал был"
-        assert contains_all(answer, ["300", "зал"]) is True
+        answer = "Сумма 300 руб, курьер приехал"
+        assert contains_all(answer, ["300", "курьер"]) is True
 
     def test_одного_факта_нет(self):
-        answer = "Воды 300 мл"
-        assert contains_all(answer, ["300", "зал"]) is False
+        answer = "Сумма 300 руб"
+        assert contains_all(answer, ["300", "курьер"]) is False
 
     def test_пустой_список_всегда_верен(self):
         assert contains_all("что угодно", []) is True
 
     def test_значение_не_режется_посередине(self):
         # главный случай: 0.35 это не 0.3
-        assert contains_all("water=0.35; gym=да", ["water=0.3"]) is False
-        assert contains_all("water=0.3; gym=да", ["water=0.3"]) is True
+        assert contains_all("weight=0.35; urgent=yes", ["weight=0.3"]) is False
+        assert contains_all("weight=0.3; urgent=yes", ["weight=0.3"]) is True
 
     def test_точка_в_конце_ответа_не_мешает(self):
-        assert contains_all("water=0.3.", ["water=0.3"]) is True
+        assert contains_all("weight=0.3.", ["weight=0.3"]) is True
 
 
 class TestFound:
     @pytest.mark.parametrize(
         "item, text",
         [
-            ("300", "воды 300 мл"),
-            ("water=0.3", "water=0.3; gym=да"),
-            ("water=0.3", "итог: water=0.3"),
-            ("sleep=6", "sleep=6, gym=нет"),
-            ("зал", "был в зале"),  # слова ищутся как подстрока, окончания не мешают
-            ("gym=да", "gym=да;sleep=7"),
-            ("0.5", "выпил 0.5 л"),
+            ("300", "сумма 300 руб"),
+            ("weight=0.3", "weight=0.3; urgent=yes"),
+            ("weight=0.3", "итог: weight=0.3"),
+            ("items=6", "items=6, urgent=no"),
+            ("заказ", "по заказу 7710"),  # слова ищутся как подстрока, окончания не мешают
+            ("urgent=yes", "urgent=yes;items=7"),
+            ("0.5", "вес 0.5 кг"),
         ],
     )
     def test_находит(self, item, text):
@@ -67,13 +67,13 @@ class TestFound:
     @pytest.mark.parametrize(
         "item, text",
         [
-            ("water=0.3", "water=0.35"),
-            ("water=0.3", "water=0.3,5"),  # дробь через запятую
-            ("300", "1300 мл"),
-            ("5", "выпил 0.5 л"),
-            ("5", "выпил 0,5 л"),
+            ("weight=0.3", "weight=0.35"),
+            ("weight=0.3", "weight=0.3,5"),  # дробь через запятую
+            ("300", "1300 руб"),
+            ("5", "вес 0.5 кг"),
+            ("5", "вес 0,5 кг"),
             ("0.3", "10.3"),
-            ("sleep=6", "sleep=6.5"),
+            ("items=6", "items=6.5"),
         ],
     )
     def test_не_режет_число(self, item, text):
@@ -92,8 +92,8 @@ class TestContainsNone:
 
     def test_граница_числа_работает_и_здесь(self):
         # запрещено ровно 0, а 0.5 это другое значение
-        assert contains_none("water=0.5", ["water=0"]) is True
-        assert contains_none("water=0", ["water=0"]) is False
+        assert contains_none("weight=0.5", ["weight=0"]) is True
+        assert contains_none("weight=0", ["weight=0"]) is False
 
 
 class TestCheck:
@@ -102,8 +102,8 @@ class TestCheck:
 
     def test_условия_работают_вместе(self):
         expect = {"contains_all": ["300"], "contains_none": ["конечно"]}
-        assert check("Воды 300 мл", expect) is True
-        assert check("Конечно, воды 300 мл", expect) is False
+        assert check("Сумма 300 руб", expect) is True
+        assert check("Конечно, сумма 300 руб", expect) is False
 
     def test_одно_условие_не_выполнено_значит_провал(self):
         expect = {"exact": "да", "contains_none": ["нет"]}

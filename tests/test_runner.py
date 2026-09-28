@@ -10,8 +10,8 @@ from core.variants import Variant
 
 VARIANTS = [Variant("a", "промпт А"), Variant("b", "промпт Б")]
 CASES = [
-    Case("water", "выпил 300 мл", {"contains_all": ["water=0.3"]}),
-    Case("gym", "пропустил зал", {"contains_all": ["gym=нет"]}),
+    Case("order", "заказ 48213", {"contains_all": ["order=48213"]}),
+    Case("urgent", "не срочно", {"contains_all": ["urgent=no"]}),
 ]
 
 
@@ -36,31 +36,31 @@ def fake_ask(replies):
 
 async def test_все_пары_и_проверки():
     ask = fake_ask({
-        ("промпт А", "выпил 300 мл"): "water=0.3",
-        ("промпт А", "пропустил зал"): "gym=да",
-        ("промпт Б", "выпил 300 мл"): "water=0.3",
-        ("промпт Б", "пропустил зал"): "gym=нет",
+        ("промпт А", "заказ 48213"): "order=48213",
+        ("промпт А", "не срочно"): "urgent=yes",
+        ("промпт Б", "заказ 48213"): "order=48213",
+        ("промпт Б", "не срочно"): "urgent=no",
     })
     results = await run(VARIANTS, CASES, "m", limit=3, ask=ask)
 
     assert [(r.variant, r.case, r.passed) for r in results] == [
-        ("a", "water", True),
-        ("a", "gym", False),
-        ("b", "water", True),
-        ("b", "gym", True),
+        ("a", "order", True),
+        ("a", "urgent", False),
+        ("b", "order", True),
+        ("b", "urgent", True),
     ]
     jobs, limit = ask.seen[0]
     assert limit == 3
-    assert jobs[0] == ("промпт А", "выпил 300 мл", "m")
+    assert jobs[0] == ("промпт А", "заказ 48213", "m")
     assert results[0].input_tokens == 10 and results[0].seconds == 0.5
 
 
 async def test_сбой_не_роняет_прогон_и_записан_отдельно():
     ask = fake_ask({
-        ("промпт А", "выпил 300 мл"): ModelError("429 и попытки кончились"),
-        ("промпт А", "пропустил зал"): "gym=нет",
-        ("промпт Б", "выпил 300 мл"): "water=0.3",
-        ("промпт Б", "пропустил зал"): "gym=нет",
+        ("промпт А", "заказ 48213"): ModelError("429 и попытки кончились"),
+        ("промпт А", "не срочно"): "urgent=no",
+        ("промпт Б", "заказ 48213"): "order=48213",
+        ("промпт Б", "не срочно"): "urgent=no",
     })
     results = await run(VARIANTS, CASES, "m", ask=ask)
 
@@ -121,7 +121,7 @@ async def test_целиком_через_настоящий_клиент(monkeyp
         calls.append(body)
         if len(calls) == 1:
             return httpx.Response(429, text="slow down")
-        text = "water=0.3" if "300" in body["messages"][0]["content"] else "gym=нет"
+        text = "order=48213" if "48213" in body["messages"][0]["content"] else "urgent=no"
         return httpx.Response(200, json={
             "model": body["model"],
             "content": [{"type": "text", "text": text}],
